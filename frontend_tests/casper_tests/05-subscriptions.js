@@ -140,9 +140,19 @@ casper.then(function () {
         casper.click('form#stream_creation_form button.button.white');
         casper.fill('form#add_new_subscription', {stream_name: '  '});
         casper.click('#add_new_subscription .create_stream_button');
-        casper.fill('form#stream_creation_form', {stream_name: 'Waseemio'});
+        casper.fill('form#stream_creation_form', {stream_name: 'Waseemio@'});
         casper.click('form#stream_creation_form button.button.sea-green');
     });
+});
+casper.then(function () {
+   casper.waitForSelectorText('#stream_name_error', 'A stream needs to have valid characters', function () {
+       casper.test.assertTextExists('A stream needs to have valid characters', "Can't create a stream with invalid characters");
+        casper.click('#create_stream_button');
+        casper.waitUntilVisible("form#stream_creation_form", function () {
+            casper.fill('form#stream_creation_form', {stream_name: 'Waseemio'});
+            casper.click('form#stream_creation_form button.btn.btn-primary');
+        });
+   });
 });
 casper.then(function () {
     casper.waitForSelectorText('#stream_name_error', 'A stream with this name already exists', function () {

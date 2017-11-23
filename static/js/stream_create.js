@@ -33,6 +33,11 @@ var stream_name_error = (function () {
         $("#stream_name_error").show();
     };
 
+    self.report_invalid_chars = function () {
+        $("#stream_name_error").text(i18n.t("A stream needs to have valid characters"));
+        $("#stream_name_error").show();
+    };
+
     self.select = function () {
         $("#create_stream_name").focus().select();
     };
@@ -62,6 +67,16 @@ var stream_name_error = (function () {
 
         if (stream_data.get_sub(stream_name)) {
             self.report_already_exists();
+            self.select();
+            return false;
+        }
+
+        var NAME_INVALID_CHARS = ['*', '@', '`', '#'];
+        var STREAM_NAME = stream_name.split('');
+        var intersection = _.intersection(NAME_INVALID_CHARS, STREAM_NAME);
+
+        if (intersection.length !== 0) {
+            self.report_invalid_chars();
             self.select();
             return false;
         }
