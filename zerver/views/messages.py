@@ -982,9 +982,6 @@ def send_message_backend(request, user_profile,
             return json_error(_("Invalid mirrored message"))
         if client.name == "zephyr_mirror" and not user_profile.realm.is_zephyr_mirror_realm:
             return json_error(_("Invalid mirrored realm"))
-        if (client.name == "irc_mirror" and message_type_name != "private" and
-                not message_to[0].startswith("#")):
-            return json_error(_("IRC stream names must start with #"))
         sender = mirror_sender
     else:
         sender = user_profile
