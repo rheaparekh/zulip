@@ -1,166 +1,452 @@
 require 'spec_helper'
-describe 'apt::source', :type => :define do
+
+describe 'apt::source' do
+  GPG_KEY_ID = '6F6B15509CF8E59E6E469F327F438280EF8D349F'.freeze
+
+  let :pre_condition do
+    'class { "apt": }'
+  end
+
   let :title do
     'my_source'
   end
 
-  let :default_params do
-    {
-      :ensure             => 'present',
-      :location           => '',
-      :release            => 'karmic',
-      :repos              => 'main',
-      :include_src        => true,
-      :required_packages  => false,
-      :key                => false,
-      :key_server         => 'keyserver.ubuntu.com',
-      :key_content        => false,
-      :key_source         => false,
-      :pin                => false
-    }
-  end
-
-  [{},
-   {
-      :location           => 'http://example.com',
-      :release            => 'precise',
-      :repos              => 'security',
-      :include_src        => false,
-      :required_packages  => 'apache',
-      :key                => 'key_name',
-      :key_server         => 'keyserver.debian.com',
-      :pin                => '600',
-      :key_content        => 'ABCD1234'
-    },
-    {
-      :key                => 'key_name',
-      :key_server         => 'keyserver.debian.com',
-      :key_content        => false,
-    },
-    {
-      :ensure             => 'absent',
-      :location           => 'http://example.com',
-      :release            => 'precise',
-      :repos              => 'security',
-    },
-    {
-      :release            => '',
-    },
-    {
-      :release            => 'custom',
-    },
-    {
-      :architecture       => 'amd64',
-    }
-  ].each do |param_set|
-    describe "when #{param_set == {} ? "using default" : "specifying"} class parameters" do
-      let :param_hash do
-        default_params.merge(param_set)
-      end
-
+  context 'defaults' do
+    context 'without location' do
       let :facts do
-        {:lsbdistcodename => 'karmic'}
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          osfamily: 'Debian',
+          lsbdistcodename: 'wheezy',
+          puppetversion: Puppet.version,
+        }
       end
 
-      let :params do
-        param_set
+      it do
+        is_expected.to raise_error(Puppet::Error, %r{source entry without specifying a location})
       end
-
-      let :filename do
-        "/etc/apt/sources.list.d/#{title}.list"
+    end
+    context 'with location' do
+      let :facts do
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          lsbdistid: 'Debian',
+          lsbdistcodename: 'wheezy',
+          osfamily: 'Debian',
+          puppetversion: Puppet.version,
+        }
       end
-
-      let :content do
-        content = "# #{title}"
-        if param_hash[:architecture]
-          arch = "[arch=#{param_hash[:architecture]}]"
-        end
-        content << "\ndeb #{arch}#{param_hash[:location]} #{param_hash[:release]} #{param_hash[:repos]}\n"
-
-        if param_hash[:include_src]
-          content << "deb-src #{arch}#{param_hash[:location]} #{param_hash[:release]} #{param_hash[:repos]}\n"
-        end
-        content
-      end
-
-      it { should contain_apt__params }
-
-      it { should contain_file("#{title}.list").with({
-          'ensure'    => param_hash[:ensure],
-          'path'      => filename,
-          'owner'     => 'root',
-          'group'     => 'root',
-          'mode'      => '0644',
-          'content'   => content,
-        })
-      }
+      let(:params) { { location: 'hello.there' } }
 
       it {
-        if param_hash[:pin]
-          should contain_apt__pin(title).with({
-            "priority"  => param_hash[:pin],
-            "before"    => "File[#{title}.list]"
-          })
-        else
-          should_not contain_apt__pin(title).with({
-            "priority"  => param_hash[:pin],
-            "before"    => "File[#{title}.list]"
-          })
-        end
-      }
-
-      it {
-        should contain_exec("apt_update").with({
-          "command"     => "/usr/bin/apt-get update",
-          "refreshonly" => true
-        })
-      }
-
-      it {
-        if param_hash[:required_packages]
-          should contain_exec("Required packages: '#{param_hash[:required_packages]}' for #{title}").with({
-            "command" => "/usr/bin/apt-get -y install #{param_hash[:required_packages]}",
-            "subscribe"   => "File[#{title}.list]",
-            "refreshonly" => true,
-            "before"      => 'Exec[apt_update]',
-          })
-        else
-          should_not contain_exec("Required packages: '#{param_hash[:required_packages]}' for #{title}").with({
-            "command"     => "/usr/bin/apt-get -y install #{param_hash[:required_packages]}",
-            "subscribe"   => "File[#{title}.list]",
-            "refreshonly" => true
-          })
-        end
-      }
-
-      it {
-        if param_hash[:key]
-          should contain_apt__key("Add key: #{param_hash[:key]} from Apt::Source #{title}").with({
-            "key"         => param_hash[:key],
-            "ensure"      => :present,
-            "key_server"  => param_hash[:key_server],
-            "key_content" => param_hash[:key_content],
-            "key_source"  => param_hash[:key_source],
-            "before"      => "File[#{title}.list]"
-          })
-        else
-          should_not contain_apt__key("Add key: #{param_hash[:key]} from Apt::Source #{title}").with({
-            "key"         => param_hash[:key],
-            "ensure"      => :present,
-            "key_server"  => param_hash[:key_server],
-            "key_content" => param_hash[:key_content],
-            "key_source"  => param_hash[:key_source],
-            "before"      => "File[#{title}.list]"
-          })
-        end
+        is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').without_content(%r{# my_source\ndeb-src hello.there wheezy main\n})
       }
     end
   end
-  describe "without release should raise a Puppet::Error" do
-    let(:default_params) { Hash.new }
-    let(:facts) { Hash.new }
-    it { expect { should raise_error(Puppet::Error) } }
-    let(:facts) { { :lsbdistcodename => 'lucid' } }
-    it { should contain_apt__source(title) }
+
+  describe 'no defaults' do
+    let :facts do
+      {
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'Debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'Debian',
+        operatingsystem: 'Debian',
+        lsbdistrelease: '7.0',
+        puppetversion: Puppet.version,
+      }
+    end
+
+    context 'with complex pin' do
+      let :params do
+        {
+          location: 'hello.there',
+          pin: { 'release' => 'wishwash',
+                 'explanation' => 'wishwash',
+                 'priority'    => 1001 },
+        }
+      end
+
+      it {
+        is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{hello.there wheezy main\n})
+      }
+
+      it { is_expected.to contain_file('/etc/apt/sources.list.d/my_source.list').that_notifies('Class[Apt::Update]') }
+
+      it {
+        is_expected.to contain_apt__pin('my_source').that_comes_before('Apt::Setting[list-my_source]').with(ensure: 'present',
+                                                                                                            priority: 1001,
+                                                                                                            explanation: 'wishwash',
+                                                                                                            release: 'wishwash')
+      }
+    end
+
+    context 'with simple key' do
+      let :params do
+        {
+          comment: 'foo',
+          location: 'http://debian.mirror.iweb.ca/debian/',
+          release: 'sid',
+          repos: 'testing',
+          key: GPG_KEY_ID,
+          pin: '10',
+          architecture: 'x86_64',
+          allow_unsigned: true,
+        }
+      end
+
+      it {
+        is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{# foo\ndeb \[arch=x86_64 trusted=yes\] http://debian.mirror.iweb.ca/debian/ sid testing\n})
+                                                             .without_content(%r{deb-src})
+      }
+
+      it {
+        is_expected.to contain_apt__pin('my_source').that_comes_before('Apt::Setting[list-my_source]').with(ensure: 'present',
+                                                                                                            priority: '10',
+                                                                                                            origin: 'debian.mirror.iweb.ca')
+      }
+
+      it {
+        is_expected.to contain_apt__key("Add key: #{GPG_KEY_ID} from Apt::Source my_source").that_comes_before('Apt::Setting[list-my_source]').with(ensure: 'present',
+                                                                                                                                                    id: GPG_KEY_ID)
+      }
+    end
+
+    context 'with complex key' do
+      let :params do
+        {
+          comment: 'foo',
+          location: 'http://debian.mirror.iweb.ca/debian/',
+          release: 'sid',
+          repos: 'testing',
+          key: { 'id' => GPG_KEY_ID, 'server' => 'pgp.mit.edu',
+                 'content' => 'GPG key content',
+                 'source'  => 'http://apt.puppetlabs.com/pubkey.gpg' },
+          pin: '10',
+          architecture: 'x86_64',
+          allow_unsigned: true,
+        }
+      end
+
+      it {
+        is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{# foo\ndeb \[arch=x86_64 trusted=yes\] http://debian.mirror.iweb.ca/debian/ sid testing\n})
+                                                             .without_content(%r{deb-src})
+      }
+
+      it {
+        is_expected.to contain_apt__pin('my_source').that_comes_before('Apt::Setting[list-my_source]').with(ensure: 'present',
+                                                                                                            priority: '10',
+                                                                                                            origin: 'debian.mirror.iweb.ca')
+      }
+
+      it {
+        is_expected.to contain_apt__key("Add key: #{GPG_KEY_ID} from Apt::Source my_source").that_comes_before('Apt::Setting[list-my_source]').with(ensure: 'present',
+                                                                                                                                                    id: GPG_KEY_ID,
+                                                                                                                                                    server: 'pgp.mit.edu',
+                                                                                                                                                    content: 'GPG key content',
+                                                                                                                                                    source: 'http://apt.puppetlabs.com/pubkey.gpg')
+      }
+    end
+
+    context 'with simple key' do
+      let :params do
+        {
+          comment: 'foo',
+          location: 'http://debian.mirror.iweb.ca/debian/',
+          release: 'sid',
+          repos: 'testing',
+          key: GPG_KEY_ID,
+          pin: '10',
+          architecture: 'x86_64',
+          allow_unsigned: true,
+        }
+      end
+
+      it {
+        is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{# foo\ndeb \[arch=x86_64 trusted=yes\] http://debian.mirror.iweb.ca/debian/ sid testing\n})
+                                                             .without_content(%r{deb-src})
+      }
+
+      it {
+        is_expected.to contain_apt__pin('my_source').that_comes_before('Apt::Setting[list-my_source]').with(ensure: 'present',
+                                                                                                            priority: '10',
+                                                                                                            origin: 'debian.mirror.iweb.ca')
+      }
+
+      it {
+        is_expected.to contain_apt__key("Add key: #{GPG_KEY_ID} from Apt::Source my_source").that_comes_before('Apt::Setting[list-my_source]').with(ensure: 'present',
+                                                                                                                                                    id: GPG_KEY_ID)
+      }
+    end
+  end
+
+  context 'allow_unsigned true' do
+    let :facts do
+      {
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'Debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'Debian',
+        puppetversion: Puppet.version,
+      }
+    end
+    let :params do
+      {
+        location: 'hello.there',
+        allow_unsigned: true,
+      }
+    end
+
+    it {
+      is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{# my_source\ndeb \[trusted=yes\] hello.there wheezy main\n})
+    }
+  end
+
+  context 'architecture equals x86_64' do
+    let :facts do
+      {
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'Debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'Debian',
+        puppetversion: Puppet.version,
+      }
+    end
+    let :params do
+      {
+        location: 'hello.there',
+        include: { 'deb' => false, 'src' => true },
+        architecture: 'x86_64',
+      }
+    end
+
+    it {
+      is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{# my_source\ndeb-src \[arch=x86_64\] hello.there wheezy main\n})
+    }
+  end
+
+  context 'with architecture fact and unset architecture parameter' do
+    let :facts do
+      {
+        architecture: 'amd64',
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'Debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'Debian',
+        puppetversion: Puppet.version,
+      }
+    end
+    let :params do
+      {
+        location: 'hello.there',
+        include: { 'deb' => false, 'src' => true },
+      }
+    end
+
+    it {
+      is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{# my_source\ndeb-src hello.there wheezy main\n})
+    }
+  end
+
+  context 'include_src => true' do
+    let :facts do
+      {
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'Debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'Debian',
+        puppetversion: Puppet.version,
+      }
+    end
+    let :params do
+      {
+        location: 'hello.there',
+        include: { 'src' => true },
+      }
+    end
+
+    it {
+      is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{# my_source\ndeb hello.there wheezy main\ndeb-src hello.there wheezy main\n})
+    }
+  end
+
+  context 'include deb => false' do
+    let :facts do
+      {
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'debian',
+        puppetversion: Puppet.version,
+      }
+    end
+    let :params do
+      {
+        include: { 'deb' => false },
+        location: 'hello.there',
+      }
+    end
+
+    it {
+      is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').without_content(%r{deb-src hello.there wheezy main\n})
+    }
+    it { is_expected.to contain_apt__setting('list-my_source').without_content(%r{deb hello.there wheezy main\n}) }
+  end
+
+  context 'include src => true and include deb => false' do
+    let :facts do
+      {
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'debian',
+        puppetversion: Puppet.version,
+      }
+    end
+    let :params do
+      {
+        include: { 'deb' => false, 'src' => true },
+        location: 'hello.there',
+      }
+    end
+
+    it {
+      is_expected.to contain_apt__setting('list-my_source').with(ensure: 'present').with_content(%r{deb-src hello.there wheezy main\n})
+    }
+    it { is_expected.to contain_apt__setting('list-my_source').without_content(%r{deb hello.there wheezy main\n}) }
+  end
+
+  context 'ensure => absent' do
+    let :facts do
+      {
+        os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+        lsbdistid: 'Debian',
+        lsbdistcodename: 'wheezy',
+        osfamily: 'Debian',
+        puppetversion: Puppet.version,
+      }
+    end
+    let :params do
+      {
+        ensure: 'absent',
+      }
+    end
+
+    it {
+      is_expected.to contain_apt__setting('list-my_source').with(ensure: 'absent')
+    }
+  end
+
+  describe 'validation' do
+    context 'no release' do
+      let :facts do
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          lsbdistid: 'Debian',
+          osfamily: 'Debian',
+          puppetversion: Puppet.version,
+        }
+      end
+      let(:params) { { location: 'hello.there' } }
+
+      it do
+        is_expected.to raise_error(Puppet::Error, %r{lsbdistcodename fact not available: release parameter required})
+      end
+    end
+
+    context 'release is empty string' do
+      let :facts do
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          lsbdistid: 'Debian',
+          osfamily: 'Debian',
+          puppetversion: Puppet.version,
+        }
+      end
+      let(:params) { { location: 'hello.there', release: '' } }
+
+      it { is_expected.to contain_apt__setting('list-my_source').with_content(%r{hello\.there  main}) }
+    end
+
+    context 'invalid pin' do
+      let :facts do
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          lsbdistid: 'Debian',
+          lsbdistcodename: 'wheezy',
+          osfamily: 'Debian',
+          puppetversion: Puppet.version,
+        }
+      end
+      let :params do
+        {
+          location: 'hello.there',
+          pin: true,
+        }
+      end
+
+      it do
+        is_expected.to raise_error(Puppet::Error, %r{expects a value})
+      end
+    end
+
+    context 'with notify_update = undef (default)' do
+      let :facts do
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          lsbdistid: 'Debian',
+          lsbdistcodename: 'wheezy',
+          osfamily: 'Debian',
+          puppetversion: Puppet.version,
+        }
+      end
+      let :params do
+        {
+          location: 'hello.there',
+        }
+      end
+
+      it { is_expected.to contain_apt__setting("list-#{title}").with_notify_update(true) }
+    end
+
+    context 'with notify_update = true' do
+      let :facts do
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          lsbdistid: 'Debian',
+          lsbdistcodename: 'wheezy',
+          osfamily: 'Debian',
+          puppetversion: Puppet.version,
+        }
+      end
+      let :params do
+        {
+          location: 'hello.there',
+          notify_update: true,
+        }
+      end
+
+      it { is_expected.to contain_apt__setting("list-#{title}").with_notify_update(true) }
+    end
+
+    context 'with notify_update = false' do
+      let :facts do
+        {
+          os: { family: 'Debian', name: 'Debian', release: { major: '7', full: '7.0' } },
+          lsbdistid: 'Debian',
+          lsbdistcodename: 'wheezy',
+          osfamily: 'Debian',
+          puppetversion: Puppet.version,
+        }
+      end
+      let :params do
+        {
+          location: 'hello.there',
+          notify_update: false,
+        }
+      end
+
+      it { is_expected.to contain_apt__setting("list-#{title}").with_notify_update(false) }
+    end
   end
 end
