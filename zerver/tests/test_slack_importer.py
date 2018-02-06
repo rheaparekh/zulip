@@ -32,8 +32,13 @@ import ujson
 import json
 
 import os
-import mock
+from mock import mock, patch
 from typing import Any, AnyStr, Dict, List, Optional, Set, Tuple, Text
+
+class MuteFunction():
+    # A mock class to temporarily suppress output to stdout
+    def write(self, s):
+        pass
 
 class SlackImporter(ZulipTestCase):
 
@@ -103,7 +108,9 @@ class SlackImporter(ZulipTestCase):
                             'U09TYF5Sk': 3}
         slack_data_dir = './random_path'
         timestamp = int(timezone_now().timestamp())
-        zerver_userprofile, added_users = users_to_zerver_userprofile(slack_data_dir, 1, timestamp, 'test_domain')
+        with patch('sys.stdout', new=MuteFunction()):
+            zerver_userprofile, added_users = users_to_zerver_userprofile(slack_data_dir, 1,
+                                                                          timestamp, 'test_domain')
 
         self.assertDictEqual(added_users, test_added_users)
 
@@ -189,8 +196,9 @@ class SlackImporter(ZulipTestCase):
                          'topic': {'value': ''}, 'purpose': {'value': ''}}]
         mock_get_data_file.return_value = channel_data
 
-        channel_to_zerver_stream_output = channels_to_zerver_stream('./random_path', realm_id, added_users,
-                                                                    zerver_userprofile)
+        with patch('sys.stdout', new=MuteFunction()):
+            channel_to_zerver_stream_output = channels_to_zerver_stream('./random_path', realm_id,
+                                                                        added_users, zerver_userprofile)
         zerver_defaultstream = channel_to_zerver_stream_output[0]
         zerver_stream = channel_to_zerver_stream_output[1]
         added_channels = channel_to_zerver_stream_output[2]
@@ -405,8 +413,9 @@ class SlackImporter(ZulipTestCase):
 
         mock_message.side_effect = [[zerver_message1, zerver_usermessage1],
                                     [zerver_message2, zerver_usermessage2]]
-        message_json = convert_slack_workspace_messages('./random_path', 2, {},
-                                                        {}, added_channels,
-                                                        realm)
+        with patch('sys.stdout', new=MuteFunction()):
+            message_json = convert_slack_workspace_messages('./random_path', 2, {},
+                                                            {}, added_channels,
+                                                            realm)
         self.assertEqual(message_json['zerver_message'], zerver_message1 + zerver_message2)
         self.assertEqual(message_json['zerver_usermessage'], zerver_usermessage1 + zerver_usermessage2)
