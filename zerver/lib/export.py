@@ -22,7 +22,7 @@ from zerver.lib.bulk_create import bulk_create_users
 from zerver.models import UserProfile, Realm, Client, Huddle, Stream, \
     UserMessage, Subscription, Message, RealmEmoji, RealmFilter, \
     RealmDomain, Recipient, DefaultStream, get_user_profile_by_id, \
-    UserPresence, UserActivity, UserActivityInterval, \
+    UserPresence, UserActivity, UserActivityInterval, Reaction\
     get_display_recipient, Attachment, get_system_bot, email_to_username
 from zerver.lib.parallel import run_parallel
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, \
@@ -73,6 +73,7 @@ ALL_ZERVER_TABLES = [
     'zerver_realm',
     'zerver_realmdomain',
     'zerver_realmemoji',
+    'zerver_reaction',
     'zerver_realmfilter',
     'zerver_recipient',
     'zerver_scheduledemail',
