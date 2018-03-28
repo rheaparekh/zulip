@@ -66,6 +66,8 @@ def mocked_requests_get(*args: List[str], **kwargs: List[str]) -> mock.Mock:
 
     if args[0] == 'https://slack.com/api/users.list?token=valid-token':
         return MockResponse({"members": "user_data"}, 200)
+    elif args[0] == 'https://slack.com/api/users.list?token=invalid-token':
+        return MockResponse({"ok": False, "error": "invalid_auth"}, 200)
     else:
         return MockResponse(None, 404)
 
@@ -86,6 +88,11 @@ class SlackImporter(ZulipTestCase):
         with self.assertRaises(Exception) as invalid:
             get_user_data(token)
         self.assertEqual(invalid.exception.args, ('Enter a valid token!',),)
+
+        token = 'status404'
+        with self.assertRaises(Exception) as invalid:
+            get_user_data(token)
+        self.assertEqual(invalid.exception.args, ('Something went wrong. Please try again!',),)
 
     def test_build_zerver_realm(self) -> None:
         fixtures_path = os.path.dirname(os.path.abspath(__file__)) + '/../fixtures/'

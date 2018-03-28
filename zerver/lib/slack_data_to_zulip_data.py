@@ -855,10 +855,12 @@ def get_user_data(token: str) -> List[ZerverFieldsT]:
     slack_user_list_url = "https://slack.com/api/users.list"
     user_list = requests.get('%s?token=%s' % (slack_user_list_url, token))
     if user_list.status_code == requests.codes.ok:
+        if 'error' in user_list.json():
+            raise Exception('Enter a valid token!')
         user_list_json = user_list.json()['members']
         return user_list_json
     else:
-        raise Exception('Enter a valid token!')
+        raise Exception('Something went wrong. Please try again!')
 
 def create_converted_data_files(data: Any, output_dir: str, file_path: str) -> None:
     output_file = output_dir + file_path
