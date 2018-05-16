@@ -77,6 +77,7 @@ class SlackOutgoingWebhookService(OutgoingWebhookServiceInterface):
     def process_event(self, event: Dict[str, Any]) -> Tuple[Dict[str, Any], Any]:
         rest_operation = {'method': 'POST',
                           'relative_url_path': '',
+                          'headers': {'Content-Type': 'application/json'},
                           'base_url': self.base_url,
                           'request_kwargs': {}}
 
@@ -84,19 +85,7 @@ class SlackOutgoingWebhookService(OutgoingWebhookServiceInterface):
             raise NotImplementedError("Private messaging service not supported.")
 
         service = get_service_profile(event['user_profile_id'], str(self.service_name))
-        request_data = [("token", self.token),
-                        ("team_id", event['message']['sender_realm_str']),
-                        ("team_domain", email_to_domain(event['message']['sender_email'])),
-                        ("channel_id", event['message']['stream_id']),
-                        ("channel_name", event['message']['display_recipient']),
-                        ("timestamp", event['message']['timestamp']),
-                        ("user_id", event['message']['sender_id']),
-                        ("user_name", event['message']['sender_full_name']),
-                        ("text", event['command']),
-                        ("trigger_word", event['trigger']),
-                        ("service_id", service.id),
-                        ]
-
+        request_data = {"text": event['command']}
         return rest_operation, request_data
 
     def process_success(self, response: Response,
@@ -234,12 +223,14 @@ def do_rest_call(rest_operation: Dict[str, Any],
         raise JsonableError(error)
 
     http_method = rest_operation['method']
+    headers = rest_operation['headers']
     final_url = urllib.parse.urljoin(rest_operation['base_url'], rest_operation['relative_url_path'])
     request_kwargs = rest_operation['request_kwargs']
     request_kwargs['timeout'] = timeout
 
     try:
-        response = requests.request(http_method, final_url, data=request_data, **request_kwargs)
+        request_data = json.dumps(request_data)
+        response = requests.request(http_method, final_url, data=request_data, headers=headers, **request_kwargs)
         if str(response.status_code).startswith('2'):
             process_success_response(event, service_handler, response)
         else:
