@@ -330,7 +330,7 @@ def import_uploads_s3(bucket_name: str, import_dir: Path, processing_avatars: bo
             key.key = avatar_path
             if record['s3_path'].endswith('.original'):
                 key.key += '.original'
-        if processing_emojis:
+        elif processing_emojis:
             # For emojis we follow the function 'upload_emoji_image'
             emoji_path = RealmEmoji.PATH_ID_TEMPLATE.format(
                 realm_id=record['realm_id'],
@@ -345,7 +345,7 @@ def import_uploads_s3(bucket_name: str, import_dir: Path, processing_avatars: bo
                 sanitize_name(os.path.basename(record['path']))
             ])
             key.key = s3_file_name
-            path_maps['attachment_path'][record['path']] = s3_file_name
+            path_maps['attachment_path'][record['s3_path']] = s3_file_name
 
         user_profile_id = int(record['user_profile_id'])
         # Support email gateway bot and other cross-realm messages
@@ -361,13 +361,16 @@ def import_uploads_s3(bucket_name: str, import_dir: Path, processing_avatars: bo
 
         key.set_contents_from_filename(os.path.join(import_dir, record['path']), headers=headers)
 
-        if processing_avatars:
-            # TODO: Ideally, we'd do this in a separate pass, after
-            # all the avatars have been uploaded, since we may end up
-            # unnecssarily resizing images just before the medium-size
-            # image in the export is uploaded.  See the local uplods
-            # code path for more notes.
-            upload_backend.ensure_medium_avatar_image(user_profile=user_profile)
+    if processing_avatars:
+        # Ensure that we have medium-size avatar images for every
+        # avatar.  TODO: This implementation is hacky, both in that it
+        # does get_user_profile_by_id for each user, and in that it
+        # might be better to require the export to just have these.
+        upload_backend = S3UploadBackend()
+        for record in records:
+            if record['s3_path'].endswith('.original'):
+                user_profile = get_user_profile_by_id(record['user_profile_id'])
+                upload_backend.ensure_medium_avatar_image(user_profile=user_profile)
 
 def import_uploads(import_dir: Path, processing_avatars: bool=False,
                    processing_emojis: bool=False) -> None:
@@ -385,7 +388,8 @@ def import_uploads(import_dir: Path, processing_avatars: bool=False,
             bucket_name = settings.S3_AVATAR_BUCKET
         else:
             bucket_name = settings.S3_AUTH_UPLOADS_BUCKET
-        import_uploads_s3(bucket_name, import_dir, processing_avatars=processing_avatars)
+        import_uploads_s3(bucket_name, import_dir, processing_avatars=processing_avatars,
+                          processing_emojis=processing_emojis)
 
 # Importing data suffers from a difficult ordering problem because of
 # models that reference each other circularly.  Here is a correct order.
