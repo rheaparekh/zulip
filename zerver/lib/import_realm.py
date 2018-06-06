@@ -318,8 +318,9 @@ def import_uploads_s3(bucket_name: str, import_dir: Path, processing_avatars: bo
 
     re_map_foreign_keys_internal(records, 'records', 'realm_id', related_table="realm",
                                  id_field=True)
-    re_map_foreign_keys_internal(records, 'records', 'user_profile_id',
-                                 related_table="user_profile", id_field=True)
+    if not processing_emojis:
+        re_map_foreign_keys_internal(records, 'records', 'user_profile_id',
+                                     related_table="user_profile", id_field=True)
     for record in records:
         key = Key(bucket)
 
